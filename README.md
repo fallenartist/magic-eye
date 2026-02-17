@@ -5,23 +5,23 @@ Door peephole using Waveshare ESP32-S3 2.1" round touch display.
 ## Project status
 
 - PlatformIO Arduino project targeting Waveshare ESP32-S3 round LCD hardware.
-- Current `src/` code is based on the manufacturer Sonnet_2-style driver path
+- Current `src/` code uses low-level display/touch drivers
   (`Display_ST7701` + `Touch_CST820`) with framebuffer-based rendering in `main.cpp`.
-- `legacy_examples/` contains vendor/reference sketches.
 
 ## Quick start
 
 1. Open this folder in VS Code with PlatformIO extension installed.
-2. Make sure the USB serial driver for the board is installed and active (WCH CH34x/CH34xVCP).
+2. Install and enable the USB serial driver for the board (WCH CH34x/CH34xVCP):
+   https://github.com/WCHSoftGroup/ch34xser_macos
 3. Confirm the serial device exists (example): `/dev/tty.wchusbserial...` and `/dev/cu.wchusbserial...`.
 4. Build/upload the default env: `waveshare_esp32s3_round`.
 5. Open serial monitor at `115200`.
 
 ## Notes
 
-- Upload is configured for reliability with this board/host combo:
-  - `upload_speed = 57600`
-  - `upload_flags = --no-stub`
+- Waveshare device wiki:
+  https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.1
+- Upload uses standard PlatformIO defaults.
 - Memory profile is set for this display board:
   - `board_build.flash_mode = dio`
   - `board_build.psram_type = opi`
