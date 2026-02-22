@@ -32,4 +32,5 @@ Door peephole using Waveshare ESP32-S3 2.1" round touch display.
 - Current firmware cycles demo modes on each touch:
   - `full_image` -> `image_sequence` -> `round_image` -> `alpha_overlay` -> `video`
 - Media is read from SD card (`SD_MMC`) under `/media`.
+- `video` mode prefers `/media/video/video.v565` (single stream file) and falls back to `/media/video/0000.r565` style frames.
 - See `docs/media-prep.md` for required file layout and conversion commands.

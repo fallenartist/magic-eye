@@ -8,15 +8,16 @@
 #include "Display_ST7701.h"
 
 DisplayCanvas::~DisplayCanvas() {
-  if (ownsFrames_ && frameA_) {
-    heap_caps_free(frameA_);
-    frameA_ = nullptr;
+  if (ownsFrames_) {
+    for (size_t i = 0; i < kMaxFrameBuffers; ++i) {
+      if (frames_[i]) {
+        heap_caps_free(frames_[i]);
+        frames_[i] = nullptr;
+      }
+    }
   }
-  if (ownsFrames_ && frameB_) {
-    heap_caps_free(frameB_);
-    frameB_ = nullptr;
-  }
-  drawBuffer_ = nullptr;
+  frameCount_ = 0;
+  drawIndex_ = 0;
   backend_ = Backend::kNone;
   ownsFrames_ = false;
 }
@@ -42,28 +43,52 @@ const char* DisplayCanvas::backendName() const {
   }
 }
 
-uint16_t* DisplayCanvas::frameBuffer() { return drawBuffer_; }
+uint16_t* DisplayCanvas::frameBuffer() {
+  if (frameCount_ == 0) return nullptr;
+  return frames_[drawIndex_];
+}
 
 size_t DisplayCanvas::frameBytes() const { return kFrameBytes; }
 
 bool DisplayCanvas::initPanelFrameBuffers() {
-#if DISPLAY_CANVAS_ENABLE_PANEL_FB_API
+#if DISPLAY_CANVAS_ENABLE_PANEL_FB_API && defined(ESP_ARDUINO_VERSION_MAJOR) && \
+    (ESP_ARDUINO_VERSION_MAJOR >= 3)
   if (!panel_handle) {
     return false;
   }
 
   void* buf1 = nullptr;
   void* buf2 = nullptr;
-  esp_err_t err = esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 2, &buf1, &buf2);
+  void* buf3 = nullptr;
+
+  uint32_t requested = DISPLAY_CANVAS_PANEL_FB_COUNT;
+  if (requested < 2) requested = 2;
+  if (requested > 3) requested = 3;
+
+  esp_err_t err = ESP_FAIL;
+  if (requested >= 3) {
+    err = esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 3, &buf1, &buf2, &buf3);
+  }
+  if (err != ESP_OK) {
+    buf1 = nullptr;
+    buf2 = nullptr;
+    buf3 = nullptr;
+    err = esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 2, &buf1, &buf2);
+  }
+
   if (err != ESP_OK || !buf1 || !buf2) {
     return false;
   }
 
-  frameA_ = static_cast<uint16_t*>(buf1);
-  frameB_ = static_cast<uint16_t*>(buf2);
-  drawBuffer_ = frameA_;
+  frames_[0] = static_cast<uint16_t*>(buf1);
+  frames_[1] = static_cast<uint16_t*>(buf2);
+  frames_[2] = static_cast<uint16_t*>(buf3);
+  frameCount_ = (frames_[2] != nullptr) ? 3 : 2;
+  drawIndex_ = 0;
   backend_ = Backend::kPanelFrameBuffers;
   ownsFrames_ = false;
+  Serial.printf("DisplayCanvas: panel frame buffers = %u\n",
+                static_cast<unsigned>(frameCount_));
   return true;
 #else
   return false;
@@ -71,34 +96,38 @@ bool DisplayCanvas::initPanelFrameBuffers() {
 }
 
 bool DisplayCanvas::initCustomFrameBuffers() {
-  frameA_ = static_cast<uint16_t*>(
+  frames_[0] = static_cast<uint16_t*>(
       heap_caps_malloc(kFrameBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  frameB_ = static_cast<uint16_t*>(
+  frames_[1] = static_cast<uint16_t*>(
       heap_caps_malloc(kFrameBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  frames_[2] = nullptr;
 
-  if (!frameA_ || !frameB_) {
-    if (frameA_) {
-      heap_caps_free(frameA_);
-      frameA_ = nullptr;
+  if (!frames_[0] || !frames_[1]) {
+    if (frames_[0]) {
+      heap_caps_free(frames_[0]);
+      frames_[0] = nullptr;
     }
-    if (frameB_) {
-      heap_caps_free(frameB_);
-      frameB_ = nullptr;
+    if (frames_[1]) {
+      heap_caps_free(frames_[1]);
+      frames_[1] = nullptr;
     }
-    drawBuffer_ = nullptr;
+    frameCount_ = 0;
+    drawIndex_ = 0;
     backend_ = Backend::kNone;
     ownsFrames_ = false;
     return false;
   }
 
-  drawBuffer_ = frameA_;
+  frameCount_ = 2;
+  drawIndex_ = 0;
   backend_ = Backend::kCustomPsrambuffers;
   ownsFrames_ = true;
   return true;
 }
 
 void DisplayCanvas::flipDrawBuffer() {
-  drawBuffer_ = (drawBuffer_ == frameA_) ? frameB_ : frameA_;
+  if (frameCount_ < 2) return;
+  drawIndex_ = (drawIndex_ + 1) % frameCount_;
 }
 
 void DisplayCanvas::drawHSpan(int y, int x0, int x1, uint16_t color) {
@@ -115,21 +144,22 @@ void DisplayCanvas::drawHSpan(int y, int x0, int x1, uint16_t color) {
   x0 = max(0, x0);
   x1 = min(kWidth - 1, x1);
 
-  uint16_t* row = drawBuffer_ + (y * kWidth) + x0;
+  uint16_t* row = frameBuffer() + (y * kWidth) + x0;
   for (int x = x0; x <= x1; ++x) {
     *row++ = color;
   }
 }
 
 void DisplayCanvas::fillScreen(uint16_t color) {
-  if (!drawBuffer_) return;
+  uint16_t* fb = frameBuffer();
+  if (!fb) return;
   for (size_t i = 0; i < kPixelCount; ++i) {
-    drawBuffer_[i] = color;
+    fb[i] = color;
   }
 }
 
 void DisplayCanvas::fillCircle(int cx, int cy, int radius, uint16_t color) {
-  if (!drawBuffer_ || radius <= 0) return;
+  if (!frameBuffer() || radius <= 0) return;
 
   const int r2 = radius * radius;
   for (int dy = -radius; dy <= radius; ++dy) {
@@ -143,7 +173,8 @@ void DisplayCanvas::fillCircle(int cx, int cy, int radius, uint16_t color) {
 
 void DisplayCanvas::blitRgb565(const uint16_t* src, int srcWidth, int srcHeight,
                                int dstX, int dstY) {
-  if (!drawBuffer_ || !src || srcWidth <= 0 || srcHeight <= 0) return;
+  uint16_t* fb = frameBuffer();
+  if (!fb || !src || srcWidth <= 0 || srcHeight <= 0) return;
 
   for (int sy = 0; sy < srcHeight; ++sy) {
     const int dy = dstY + sy;
@@ -164,14 +195,15 @@ void DisplayCanvas::blitRgb565(const uint16_t* src, int srcWidth, int srcHeight,
     if (copyWidth <= 0) continue;
 
     const uint16_t* srcRow = src + (sy * srcWidth) + sxStart;
-    uint16_t* dstRow = drawBuffer_ + (dy * kWidth) + dx;
+    uint16_t* dstRow = fb + (dy * kWidth) + dx;
     memcpy(dstRow, srcRow, static_cast<size_t>(copyWidth) * sizeof(uint16_t));
   }
 }
 
 void DisplayCanvas::blendArgb1555(const uint16_t* src, int srcWidth,
                                   int srcHeight, int dstX, int dstY) {
-  if (!drawBuffer_ || !src || srcWidth <= 0 || srcHeight <= 0) return;
+  uint16_t* fb = frameBuffer();
+  if (!fb || !src || srcWidth <= 0 || srcHeight <= 0) return;
 
   for (int sy = 0; sy < srcHeight; ++sy) {
     const int dy = dstY + sy;
@@ -182,14 +214,15 @@ void DisplayCanvas::blendArgb1555(const uint16_t* src, int srcWidth,
 
       const uint16_t px = src[sy * srcWidth + sx];
       if ((px & 0x8000) == 0) continue;
-      drawBuffer_[dy * kWidth + dx] = px & 0x7FFF;
+      fb[dy * kWidth + dx] = px & 0x7FFF;
     }
   }
 }
 
 void DisplayCanvas::blendA856(const uint8_t* src, int srcWidth, int srcHeight,
                               int dstX, int dstY) {
-  if (!drawBuffer_ || !src || srcWidth <= 0 || srcHeight <= 0) return;
+  uint16_t* fb = frameBuffer();
+  if (!fb || !src || srcWidth <= 0 || srcHeight <= 0) return;
 
   for (int sy = 0; sy < srcHeight; ++sy) {
     const int dy = dstY + sy;
@@ -208,11 +241,11 @@ void DisplayCanvas::blendA856(const uint8_t* src, int srcWidth, int srcHeight,
           (static_cast<uint16_t>(src[srcIdx + 2]) << 8);
 
       if (alpha == 255) {
-        drawBuffer_[dy * kWidth + dx] = src565;
+        fb[dy * kWidth + dx] = src565;
         continue;
       }
 
-      const uint16_t dst565 = drawBuffer_[dy * kWidth + dx];
+      const uint16_t dst565 = fb[dy * kWidth + dx];
       const uint16_t invAlpha = static_cast<uint16_t>(255 - alpha);
 
       const uint16_t sr5 = (src565 >> 11) & 0x1F;
@@ -230,14 +263,15 @@ void DisplayCanvas::blendA856(const uint8_t* src, int srcWidth, int srcHeight,
       const uint16_t b5 =
           static_cast<uint16_t>((sb5 * alpha + db5 * invAlpha + 127) / 255);
 
-      drawBuffer_[dy * kWidth + dx] = (r5 << 11) | (g6 << 5) | b5;
+      fb[dy * kWidth + dx] = (r5 << 11) | (g6 << 5) | b5;
     }
   }
 }
 
 void DisplayCanvas::present() {
-  if (!drawBuffer_) return;
+  uint16_t* fb = frameBuffer();
+  if (!fb) return;
 
-  esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, kWidth, kHeight, drawBuffer_);
+  esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, kWidth, kHeight, fb);
   flipDrawBuffer();
 }

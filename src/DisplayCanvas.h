@@ -7,6 +7,10 @@
 #define DISPLAY_CANVAS_ENABLE_PANEL_FB_API 0
 #endif
 
+#ifndef DISPLAY_CANVAS_PANEL_FB_COUNT
+#define DISPLAY_CANVAS_PANEL_FB_COUNT 2
+#endif
+
 class DisplayCanvas {
  public:
   enum class Backend {
@@ -38,12 +42,13 @@ class DisplayCanvas {
   void present();
 
  private:
+  static constexpr size_t kMaxFrameBuffers = 3;
   static constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
   static constexpr size_t kFrameBytes = kPixelCount * sizeof(uint16_t);
 
-  uint16_t* frameA_ = nullptr;
-  uint16_t* frameB_ = nullptr;
-  uint16_t* drawBuffer_ = nullptr;
+  uint16_t* frames_[kMaxFrameBuffers] = {nullptr, nullptr, nullptr};
+  uint8_t frameCount_ = 0;
+  uint8_t drawIndex_ = 0;
   Backend backend_ = Backend::kNone;
   bool ownsFrames_ = false;
 

@@ -27,20 +27,48 @@
 #define Dutyfactor      500    // PWM Dutyfactor      
 #define Backlight_MAX   100     
 
+#ifndef ESP_PANEL_LCD_WIDTH
 #define ESP_PANEL_LCD_WIDTH                       (480)
+#endif
+#ifndef ESP_PANEL_LCD_HEIGHT
 #define ESP_PANEL_LCD_HEIGHT                      (480)
+#endif
+#ifndef ESP_PANEL_LCD_COLOR_BITS
 #define ESP_PANEL_LCD_COLOR_BITS                  (16)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_PIXEL_BITS
 #define ESP_PANEL_LCD_RGB_PIXEL_BITS              (16)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_DATA_WIDTH
 #define ESP_PANEL_LCD_RGB_DATA_WIDTH              (16)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_FREQ_HZ
 #define ESP_PANEL_LCD_RGB_TIMING_FREQ_HZ          (16 * 1000 * 1000)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_HPW
 #define ESP_PANEL_LCD_RGB_TIMING_HPW              (8)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_HBP
 #define ESP_PANEL_LCD_RGB_TIMING_HBP              (10)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_HFP
 #define ESP_PANEL_LCD_RGB_TIMING_HFP              (50)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_VPW
 #define ESP_PANEL_LCD_RGB_TIMING_VPW              (3)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_VBP
 #define ESP_PANEL_LCD_RGB_TIMING_VBP              (8)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_TIMING_VFP
 #define ESP_PANEL_LCD_RGB_TIMING_VFP              (8)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_FRAME_BUF_NUM
 #define ESP_PANEL_LCD_RGB_FRAME_BUF_NUM           (2)
+#endif
+#ifndef ESP_PANEL_LCD_RGB_BOUNCE_BUF_SIZE
 #define ESP_PANEL_LCD_RGB_BOUNCE_BUF_SIZE         (ESP_PANEL_LCD_WIDTH * 10)
+#endif
 
 // Pin definitions
 #define ESP_PANEL_LCD_PIN_NUM_RGB_HSYNC           (38)

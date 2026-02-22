@@ -14,6 +14,11 @@ This firmware reads media files from SD card root at `/media`.
 /media/sequence/0000.r565
 /media/sequence/0001.r565
 ...
+/media/video/video.v565    # preferred for smooth playback
+/media/video/video.mjpg    # preferred for compressed video prototype (JPEG frames)
+/media/video/video.dt16    # preferred for tile-delta prototype (eye animations)
+/media/video/0000.jpg
+/media/video/0001.jpg
 /media/video/0000.r565
 /media/video/0001.r565
 ...
@@ -38,6 +43,31 @@ This firmware reads media files from SD card root at `/media`.
   - 2 bytes height (little-endian)
   - payload: `width * height * 3` bytes
   - each pixel: 1 byte alpha (`0..255`), then RGB565 LE (`uint16_t`)
+- `.v565`: single streamed RGB565 video file
+- `.mjpg`: single streamed JPEG-frame video file (custom container)
+  - 4 bytes magic: `MJPG`
+  - 2 bytes width, 2 bytes height
+  - 4 bytes frame count
+  - 2 bytes fps hint
+  - 2 bytes reserved
+  - payload: repeated `[4-byte jpeg_len][jpeg_bytes...]`
+- `.dt16`: single streamed tile-delta RGB565 video file (custom container)
+  - 4 bytes magic: `DT16`
+  - 2 bytes width, 2 bytes height
+  - 4 bytes frame count
+  - 2 bytes fps hint
+  - 2 bytes tile size (e.g. `16`)
+  - payload: repeated frame records
+  - frame record header: `u16 flags`, `u16 tile_count`
+  - if `flags & 1` (keyframe): full raw RGB565 frame payload follows
+  - else: `tile_count` entries of `[u16 tile_index][tile_rgb565_payload]`
+  - 4 bytes magic: `V565`
+  - 2 bytes width (little-endian)
+  - 2 bytes height (little-endian)
+  - 4 bytes frame count (little-endian, `0` allowed and treated as auto)
+  - 2 bytes fps hint (little-endian)
+  - 2 bytes reserved
+  - payload: `frame_count * width * height * 2` bytes (raw RGB565 LE frames)
 
 ## Conversion tool
 
@@ -86,7 +116,43 @@ python3 tools/prepare_media.py seq-r565 \
   --out-dir /Volumes/YOUR_SD/media/sequence \
   --width 480 --height 480 --fit cover
 
-# Video test (converted to frame sequence)
+# Video test (preferred: single streamed file)
+python3 tools/prepare_media.py video-v565 \
+  --input assets/video.mp4 \
+  --output /Volumes/YOUR_SD/media/video/video.v565 \
+  --fps 24 --width 480 --height 480 --fit cover
+
+# Compressed video prototype (single streamed JPEG frames)
+python3 tools/prepare_media.py video-mjpg \
+  --input assets/video.mp4 \
+  --output /Volumes/YOUR_SD/media/video/video.mjpg \
+  --fps 24 --width 480 --height 480 --fit cover --quality 70
+
+# Or pack existing frame files into a stream file
+python3 tools/prepare_media.py pack-v565 \
+  --input-glob "/Volumes/YOUR_SD/media/video/*.r565" \
+  --output /Volumes/YOUR_SD/media/video/video.v565 \
+  --fps 24
+
+# Or pack existing R565 frame files into compressed MJPG stream
+python3 tools/prepare_media.py pack-mjpg \
+  --input-glob "/Volumes/YOUR_SD/media/video/*.r565" \
+  --output /Volumes/YOUR_SD/media/video/video.mjpg \
+  --fps 24 --quality 70
+
+# Tile-delta prototype for mostly-static animations (e.g. eye)
+python3 tools/prepare_media.py pack-dt16 \
+  --input-glob "/Volumes/YOUR_SD/media/video/*.r565" \
+  --output /Volumes/YOUR_SD/media/video/video.dt16 \
+  --fps 24 --tile 8
+
+# PSRAM preload test: shorter loop under ~8 MB
+python3 tools/prepare_media.py pack-dt16 \
+  --input-glob "/Volumes/YOUR_SD/media/video/*.r565" \
+  --output /Volumes/YOUR_SD/media/video/video.dt16 \
+  --fps 24 --tile 8 --max-frames 16
+
+# Legacy option: convert video to frame sequence
 python3 tools/prepare_media.py video-r565 \
   --input assets/video.mp4 \
   --out-dir /Volumes/YOUR_SD/media/video \
@@ -97,3 +163,6 @@ python3 tools/prepare_media.py video-r565 \
 
 - `image_sequence` and `video` modes report measured FPS in serial logs.
 - Full-size 480x480 RGB565 frame is ~450 KB, so frame rate depends mostly on SD read throughput + panel transfer.
+- `video` mode now prefers `/media/video/video.dt16`, then `/media/video/video.mjpg`, then `/media/video/video.v565`.
+- Fallback order then tries numbered `NNNN.jpg`, then `NNNN.r565`.
+- DT16 playback attempts PSRAM preload for files up to ~8 MB (serial logs report preload success/fallback).
