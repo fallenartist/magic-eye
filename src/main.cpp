@@ -1,3 +1,4 @@
+#if !MJPEG_AVI_EXPERIMENT
 #include <Arduino.h>
 
 #include "DisplayCanvas.h"
@@ -15,6 +16,7 @@ static MediaDemo mediaDemo;
 
 static uint32_t lastTouchPollMs = 0;
 static bool touchDown = false;
+static uint8_t touchActionCount = 0;
 
 void IRAM_ATTR touchISR() { Touch_CST820_ISR(); }
 
@@ -29,7 +31,15 @@ void processTouch() {
   const bool pressed = (touch_data.points > 0);
   if (pressed && !touchDown) {
     touchDown = true;
-    mediaDemo.advanceMode();
+    ++touchActionCount;
+    if (touchActionCount == 1) {
+      Serial.println("Touch #1: show door bell");
+      mediaDemo.showDoorBell();
+    } else if (touchActionCount == 2) {
+      Serial.println("Touch #2: restarting");
+      delay(50);
+      ESP.restart();
+    }
   } else if (!pressed) {
     touchDown = false;
   }
@@ -38,6 +48,7 @@ void processTouch() {
 void setup() {
   Serial.begin(115200);
   Serial.println("ESP32-S3 Media Demo");
+  randomSeed(micros());
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   delay(100);
@@ -64,8 +75,9 @@ void setup() {
     Serial.println("SD media ready.");
   }
 
-  Serial.println("Tap screen to cycle modes:");
-  Serial.println("full_image -> image_sequence -> round_image -> alpha_overlay -> video");
+  Serial.println("Boot: random 24-frame video group playback");
+  Serial.println("Touch #1: door bell image");
+  Serial.println("Touch #2: restart");
   mediaDemo.update(millis());
 }
 
@@ -74,3 +86,4 @@ void loop() {
   mediaDemo.update(millis());
   delay(1);
 }
+#endif  // !MJPEG_AVI_EXPERIMENT

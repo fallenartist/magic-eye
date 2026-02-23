@@ -1,3 +1,4 @@
 .pio/
+.pio-core-local/
 .platformio-local/
 legacy_examples/
