@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "Display_ST7701.cpp"
+        "I2C_Driver.cpp"
+        "TCA9554PWR.cpp"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        driver
+        esp_lcd
+)

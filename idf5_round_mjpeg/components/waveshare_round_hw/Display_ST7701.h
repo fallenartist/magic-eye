@@ -10,11 +10,11 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_rgb.h"
+#include "driver/ledc.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "freertos/task.h"
 #include "TCA9554PWR.h"
-#include "Touch_CST820.h"
 
 #define LCD_CLK_PIN   2
 #define LCD_MOSI_PIN  1 

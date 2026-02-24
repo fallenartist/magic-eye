@@ -1,6 +1,4 @@
 #include "Display_ST7701.h"
-
-#include <Arduino.h>
       
 spi_device_handle_t SPI_handle = NULL;     
 esp_lcd_panel_handle_t panel_handle = NULL;            
@@ -53,7 +51,7 @@ void ST7701_Init()
   spi_device_interface_config_t devcfg = {
     .command_bits = 1,
     .address_bits = 8,
-    .mode = SPI_MODE0,
+    .mode = 0,
     .clock_speed_hz = 40000000,
     .spics_io_num = -1,                      
     .queue_size = 1,            // Not using queues
@@ -316,7 +314,7 @@ void ST7701_Init()
   ST7701_WriteCommand(0x29); 
   ST7701_CS_Dis();
 
-  //  RGB (assigned field-by-field for Arduino core 2.x/3.x struct compatibility)
+  // RGB config assigned field-by-field for struct layout compatibility
   esp_lcd_rgb_panel_config_t rgb_config = {};
   rgb_config.clk_src = LCD_CLK_SRC_XTAL;
   rgb_config.timings.pclk_hz = ESP_PANEL_LCD_RGB_TIMING_FREQ_HZ;
@@ -334,6 +332,7 @@ void ST7701_Init()
   rgb_config.timings.flags.pclk_active_neg = false;
   rgb_config.timings.flags.pclk_idle_high = 0;
   rgb_config.data_width = ESP_PANEL_LCD_RGB_DATA_WIDTH;
+  rgb_config.num_fbs = ESP_PANEL_LCD_RGB_FRAME_BUF_NUM;
   rgb_config.sram_trans_align = 64;
   rgb_config.psram_trans_align = 64;
   rgb_config.hsync_gpio_num = ESP_PANEL_LCD_PIN_NUM_RGB_HSYNC;
@@ -376,7 +375,6 @@ bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_pane
 void LCD_Init() {
   ST7701_Reset();
   ST7701_Init();
-  Touch_Init();
   Backlight_Init();
 }
 
@@ -396,12 +394,24 @@ void LCD_addWindow(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yen
 uint8_t LCD_Backlight = 50;
 void Backlight_Init()
 {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-  ledcAttach(LCD_Backlight_PIN, Frequency, Resolution);
-#else
-  ledcSetup(PWM_Channel, Frequency, Resolution);
-  ledcAttachPin(LCD_Backlight_PIN, PWM_Channel);
-#endif
+  ledc_timer_config_t timer_cfg = {};
+  timer_cfg.speed_mode = LEDC_LOW_SPEED_MODE;
+  timer_cfg.timer_num = static_cast<ledc_timer_t>(PWM_Channel);
+  timer_cfg.duty_resolution = static_cast<ledc_timer_bit_t>(Resolution);
+  timer_cfg.freq_hz = Frequency;
+  timer_cfg.clk_cfg = LEDC_AUTO_CLK;
+  ESP_ERROR_CHECK(ledc_timer_config(&timer_cfg));
+
+  ledc_channel_config_t chan_cfg = {};
+  chan_cfg.gpio_num = LCD_Backlight_PIN;
+  chan_cfg.speed_mode = LEDC_LOW_SPEED_MODE;
+  chan_cfg.channel = static_cast<ledc_channel_t>(PWM_Channel);
+  chan_cfg.intr_type = LEDC_INTR_DISABLE;
+  chan_cfg.timer_sel = static_cast<ledc_timer_t>(PWM_Channel);
+  chan_cfg.duty = 0;
+  chan_cfg.hpoint = 0;
+  ESP_ERROR_CHECK(ledc_channel_config(&chan_cfg));
+
   Set_Backlight(LCD_Backlight);      //0~100               
 }
 
@@ -413,11 +423,8 @@ void Set_Backlight(uint8_t Light)                        //
     uint32_t Backlight = Light*10;
     if(Backlight == 1000)
       Backlight = 1024;
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    ledcWrite(LCD_Backlight_PIN, Backlight);
-#else
-    ledcWrite(PWM_Channel, Backlight);
-#endif
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, static_cast<ledc_channel_t>(PWM_Channel), Backlight));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, static_cast<ledc_channel_t>(PWM_Channel)));
   }
 }
 
